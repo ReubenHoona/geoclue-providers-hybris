@@ -24,7 +24,6 @@
 #include <QtNetwork/QNetworkReply>
 
 #include <gbinder.h>
-#include <locationsettings.h>
 
 #include "gnss-binder-types.h"
 #include "locationtypes.h"
