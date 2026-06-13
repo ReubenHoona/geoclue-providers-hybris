@@ -20,7 +20,7 @@
     <signal name="userInputRequested">
       <arg name="service" type="s" direction="out"/>
       <arg name="fields" type="a{sv}" direction="out"/>
-      <annotation name="org.qtproject.QtDBus.QtTypeName.In1" value="QVariantMap"/>
+      <annotation name="org.qtproject.QtDBus.QtTypeName.Out1" value="QVariantMap"/>
     </signal>
     <signal name="configurationNeeded">
       <arg name="type" type="s" direction="out"/>
