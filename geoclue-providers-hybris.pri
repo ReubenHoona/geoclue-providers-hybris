@@ -8,7 +8,12 @@ target.path = /usr/libexec
 QT = core dbus network
 
 CONFIG += link_pkgconfig
-PKGCONFIG += connman-qt6 qofono-qt6 qofonoext-qt6
+PKGCONFIG += connman-qt6
+no_ofono {
+    DEFINES += HYBRIS_NO_OFONO
+} else {
+    PKGCONFIG += qofono-qt6 qofonoext-qt6
+}
 
 LIBS += -lrt
 
