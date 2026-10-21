@@ -63,6 +63,7 @@ public:
 
     // AGnssRil
     void aGnssRilInit();
+    bool aGnssRilUpdateNetworkState(bool connected, bool unmetered);
 
 protected:
     bool isReplySuccess(GBinderRemoteReply *reply);

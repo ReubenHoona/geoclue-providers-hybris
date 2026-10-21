@@ -145,6 +145,7 @@ private slots:
 
     void technologiesChanged();
     void stateChanged(NetworkManager::State state);
+    void updateNetworkState();
     void defaultDataModemChanged(const QString &modem);
     void connectionManagerValidChanged();
     void connectionContextValidChanged();

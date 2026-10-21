@@ -17,6 +17,8 @@
 
 #include <QtNetwork/QHostAddress>
 
+#include <time.h>
+
 #define GNSS_BINDER_DEFAULT_DEV  "/dev/binder"
 
 enum GnssAidlFunctions {
@@ -101,6 +103,11 @@ enum AGnssAidlRilFunctions {
     AGNSS_AIDL_RIL_SET_ID = 3,
     AGNSS_AIDL_RIL_UPDATE_NETWORK_STATE = 4,
     AGNSS_AIDL_RIL_INJECT_NI_SUPL_MESSAGE_DATA = 5
+};
+
+enum AGnssAidlRilNetworkCapabilities {
+    AGNSS_AIDL_RIL_NETWORK_CAPABILITY_NOT_METERED = 0x01,
+    AGNSS_AIDL_RIL_NETWORK_CAPABILITY_NOT_ROAMING = 0x02
 };
 
 enum AGnssAidlRilCallbacks {
@@ -570,15 +577,23 @@ bool BinderLocationBackendAidl::gnssStart()
 
         reply = gbinder_client_transact_sync_reply(m_clientGnss,
             GNSS_AIDL_START, Q_NULLPTR, &status);
+        ret = !status && isReplySuccess(reply);
+        gbinder_remote_reply_unref(reply);
 
-        reply = gbinder_client_transact_sync_reply(m_clientGnss,
-            GNSS_AIDL_START_SV_STATUS, Q_NULLPTR, &status);
-
-        if (!status && isReplySuccess(reply)) {
-            ret = true;
+        if (ret) {
+            reply = gbinder_client_transact_sync_reply(m_clientGnss,
+                GNSS_AIDL_START_SV_STATUS, Q_NULLPTR, &status);
+            ret = !status && isReplySuccess(reply);
+            gbinder_remote_reply_unref(reply);
         }
 
-        gbinder_remote_reply_unref(reply);
+        if (ret) {
+            /* NMEA is only reported after startNmea() (IGnss V2); a V1 HAL
+             * rejects the call and reports no NMEA, which is not fatal */
+            reply = gbinder_client_transact_sync_reply(m_clientGnss,
+                GNSS_AIDL_START_NMEA, Q_NULLPTR, &status);
+            gbinder_remote_reply_unref(reply);
+        }
     }
 
     if (!ret) {
@@ -596,7 +611,12 @@ bool BinderLocationBackendAidl::gnssStop()
         GBinderRemoteReply *reply;
 
         reply = gbinder_client_transact_sync_reply(m_clientGnss,
+            GNSS_AIDL_STOP_NMEA, Q_NULLPTR, &status);
+        gbinder_remote_reply_unref(reply);
+
+        reply = gbinder_client_transact_sync_reply(m_clientGnss,
             GNSS_AIDL_STOP_SV_STATUS, Q_NULLPTR, &status);
+        gbinder_remote_reply_unref(reply);
 
         reply = gbinder_client_transact_sync_reply(m_clientGnss,
             GNSS_AIDL_STOP, Q_NULLPTR, &status);
@@ -639,25 +659,39 @@ bool BinderLocationBackendAidl::gnssInjectLocation(
         req = gbinder_client_new_request(m_clientGnss);
         gbinder_local_request_init_writer(req, &writer);
 
+        struct timespec now;
+        clock_gettime(CLOCK_BOOTTIME, &now);
+
         /* Non-null parcelable */
         gbinder_writer_append_int32(&writer, 1);
-        /* Parcelable size */
+        /* Parcelable size, counting the size field itself: flags, nine
+         * doubles, timestampMillis and the ElapsedRealtime parcelable */
         gbinder_writer_append_int32(&writer,
-            sizeof(gint32) + 3 * sizeof(gdouble) + 6 * sizeof(gfloat));
+            2 * sizeof(gint32) + 9 * sizeof(gdouble) + sizeof(gint64)
+            + 3 * sizeof(gint32) + sizeof(gint64) + sizeof(gdouble));
 
         gbinder_writer_append_int32(&writer,
             HYBRIS_GNSS_LOCATION_HAS_LAT_LONG |
             HYBRIS_GNSS_LOCATION_HAS_HORIZONTAL_ACCURACY);
         gbinder_writer_append_double(&writer, latitudeDegrees);
         gbinder_writer_append_double(&writer, longitudeDegrees);
-        gbinder_writer_append_double(&writer, 0);
-        gbinder_writer_append_float(&writer, 0);
-        gbinder_writer_append_float(&writer, 0);
-        gbinder_writer_append_float(&writer, accuracyMeters);
-        gbinder_writer_append_float(&writer, 0);
-        gbinder_writer_append_float(&writer, 0);
-        gbinder_writer_append_float(&writer, 0);
-        gbinder_writer_append_int64(&writer, timestamp);
+        gbinder_writer_append_double(&writer, 0);              /* altitudeMeters */
+        gbinder_writer_append_double(&writer, 0);              /* speedMetersPerSec */
+        gbinder_writer_append_double(&writer, 0);              /* bearingDegrees */
+        gbinder_writer_append_double(&writer, accuracyMeters); /* horizontalAccuracyMeters */
+        gbinder_writer_append_double(&writer, 0);              /* verticalAccuracyMeters */
+        gbinder_writer_append_double(&writer, 0);              /* speedAccuracyMetersPerSecond */
+        gbinder_writer_append_double(&writer, 0);              /* bearingAccuracyDegrees */
+        gbinder_writer_append_int64(&writer, (gint64)timestamp * 1000);
+
+        /* ElapsedRealtime: non-null marker, size, flags (timestamp and its
+         * uncertainty present), timestampNs, timeUncertaintyNs */
+        gbinder_writer_append_int32(&writer, 1);
+        gbinder_writer_append_int32(&writer,
+            2 * sizeof(gint32) + sizeof(gint64) + sizeof(gdouble));
+        gbinder_writer_append_int32(&writer, 0x3);
+        gbinder_writer_append_int64(&writer, (gint64)now.tv_sec * 1000000000LL + now.tv_nsec);
+        gbinder_writer_append_double(&writer, 1e9);
 
         reply = gbinder_client_transact_sync_reply(m_clientGnss,
             GNSS_AIDL_INJECT_LOCATION, req, &status);
@@ -886,7 +920,8 @@ bool BinderLocationBackendAidl::gnssXtraInjectXtraData(QByteArray &xtraData)
 
         GBinderWriter writer;
         gbinder_local_request_init_writer(req, &writer);
-        gbinder_writer_append_int32(&writer, 0);
+        /* PsdsType.LONG_TERM */
+        gbinder_writer_append_int32(&writer, 1);
         gbinder_writer_append_byte_array(&writer, xtraData.data(), xtraData.length());
         reply = gbinder_client_transact_sync_reply(m_clientGnssXtra,
             GNSS_AIDL_PSDS_INJECT_PSDS_DATA, req, &status);
@@ -1072,6 +1107,47 @@ void BinderLocationBackendAidl::aGnssRilInit()
         }
     }
     gbinder_remote_reply_unref(reply);
+}
+
+bool BinderLocationBackendAidl::aGnssRilUpdateNetworkState(bool connected, bool unmetered)
+{
+    bool ret = false;
+
+    if (m_clientAGnssRil) {
+        int status = 0;
+        GBinderLocalRequest *req;
+        GBinderRemoteReply *reply;
+        GBinderWriter writer;
+
+        req = gbinder_client_new_request(m_clientAGnssRil);
+        gbinder_local_request_init_writer(req, &writer);
+
+        /* NetworkAttributes { long networkHandle; boolean isConnected;
+         * int capabilities; String apn; }: non-null marker, then the size
+         * counting itself; the empty UTF-16 apn takes 8 bytes */
+        gbinder_writer_append_int32(&writer, 1);
+        gbinder_writer_append_int32(&writer,
+            sizeof(gint32) + sizeof(gint64) + 2 * sizeof(gint32) + 8);
+        /* There is no netd on the host, so any well-formed Android network
+         * handle will do: (netId << 32) | 0xcafed00d */
+        gbinder_writer_append_int64(&writer, ((gint64)100 << 32) | 0xcafed00dLL);
+        gbinder_writer_append_int32(&writer, connected);
+        gbinder_writer_append_int32(&writer,
+            AGNSS_AIDL_RIL_NETWORK_CAPABILITY_NOT_ROAMING |
+            (unmetered ? AGNSS_AIDL_RIL_NETWORK_CAPABILITY_NOT_METERED : 0));
+        gbinder_writer_append_string16(&writer, "");
+
+        reply = gbinder_client_transact_sync_reply(m_clientAGnssRil,
+            AGNSS_AIDL_RIL_UPDATE_NETWORK_STATE, req, &status);
+        ret = !status && isReplySuccess(reply);
+        if (!ret) {
+            qWarning("Failed to update the AGNSS RIL network state");
+        }
+
+        gbinder_local_request_unref(req);
+        gbinder_remote_reply_unref(reply);
+    }
+    return ret;
 }
 
 bool BinderLocationBackendAidl::isReplySuccess(GBinderRemoteReply *reply)

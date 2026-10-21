@@ -142,6 +142,14 @@ public:
 
     // AGnssRil
     virtual void aGnssRilInit() = 0;
+    // Tell the GNSS HAL whether a data network is up and whether it is
+    // unmetered (e.g. Wi-Fi), so it can download assistance data.
+    virtual bool aGnssRilUpdateNetworkState(bool connected, bool unmetered)
+    {
+        Q_UNUSED(connected)
+        Q_UNUSED(unmetered)
+        return false;
+    }
 
 };
 

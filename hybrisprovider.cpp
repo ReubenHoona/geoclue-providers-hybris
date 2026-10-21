@@ -183,6 +183,7 @@ HybrisProvider::HybrisProvider(QObject *parent)
 
     connect(m_networkManager, &NetworkManager::technologiesChanged, this, &HybrisProvider::technologiesChanged);
     connect(m_networkManager, &NetworkManager::globalStateChanged, this, &HybrisProvider::stateChanged);
+    connect(m_networkManager, &NetworkManager::defaultRouteChanged, this, &HybrisProvider::updateNetworkState);
 
     technologiesChanged();
 
@@ -264,6 +265,7 @@ HybrisProvider::HybrisProvider(QObject *parent)
     m_backend->aGnssRilInit();
     m_backend->gnssXtraInit();
     m_backend->gnssDebugInit();
+    updateNetworkState();
 
     // Set SUPL server if provided
     if (!m_suplHost.isEmpty() && m_suplPort > 0) {
@@ -907,6 +909,8 @@ void HybrisProvider::technologiesChanged()
 
 void HybrisProvider::stateChanged(NetworkManager::State state)
 {
+    updateNetworkState();
+
     if (state == NetworkManager::OnlineState && m_gpsStarted) {
         if (m_useForcedXtraInject) {
             gnssXtraDownloadRequest();
@@ -915,6 +919,23 @@ void HybrisProvider::stateChanged(NetworkManager::State state)
             injectUtcTime();
         }
     }
+}
+
+void HybrisProvider::updateNetworkState()
+{
+    if (!m_backend)
+        return;
+
+    // connman reports "ready" when its online check fails even though the
+    // network works, so count that as connected too
+    const NetworkManager::State state = m_networkManager->globalState();
+    const bool connected = state == NetworkManager::OnlineState || state == NetworkManager::ReadyState;
+    NetworkService *service = m_networkManager->defaultRoute();
+    const bool unmetered = service && service->type() != QLatin1String("cellular");
+
+    qCDebug(lcGeoclueHybris) << "Network" << (connected ? "connected" : "not connected")
+                             << (unmetered ? "unmetered" : "metered");
+    m_backend->aGnssRilUpdateNetworkState(connected, connected && unmetered);
 }
 
 void HybrisProvider::defaultDataModemChanged(const QString &modem)
