@@ -371,7 +371,7 @@ GBinderLocalReply *geoclue_binder_gnss_callback(
             {
             guint32 capabilities;
             if (gbinder_reader_read_uint32(&reader, &capabilities)) {
-                qCDebug(lcGeoclueHybris) << "capabilities" << showbase << hex << capabilities;
+                qCDebug(lcGeoclueHybris) << "capabilities" << Qt::showbase << Qt::hex << capabilities;
             }
             }
             break;

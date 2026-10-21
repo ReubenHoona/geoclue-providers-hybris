@@ -149,7 +149,7 @@ const QDBusArgument &operator>>(const QDBusArgument &argument, QList<SatelliteIn
 HybrisProvider::HybrisProvider(QObject *parent)
 :   QObject(parent), m_backend(Q_NULLPTR),
     m_status(StatusUnavailable), m_positionInjectionConnected(false), m_xtraDownloadReply(Q_NULLPTR), m_xtraServerIndex(0),
-    m_requestedConnect(false), m_gpsStarted(false), m_locationSettings(Q_NULLPTR),
+    m_requestedConnect(false), m_gpsStarted(false),
     m_networkManager(new NetworkManager(this)), m_cellularTechnology(Q_NULLPTR),
     m_ofonoExtModemManager(new QOfonoExtModemManager(this)),
     m_connectionManager(new QOfonoConnectionManager(this)), m_connectionContext(Q_NULLPTR), m_ntpSocket(Q_NULLPTR),
@@ -314,27 +314,6 @@ void HybrisProvider::loadDefaultsFromConfigurationFile()
         if (m_suplPort == 0 && key == "SUPL_PORT") {
             m_suplPort = split.at(1).trimmed().toInt();
         }
-    }
-}
-
-void HybrisProvider::setLocationSettings(LocationSettings *settings)
-{
-    if (!m_locationSettings) {
-        m_locationSettings = settings;
-        connect(m_locationSettings, &LocationSettings::locationEnabledChanged,
-                this, &HybrisProvider::locationEnabledChanged);
-        connect(m_locationSettings, &LocationSettings::allowedDataSourcesChanged,
-                this, &HybrisProvider::locationEnabledChanged);
-        connect(m_locationSettings, &LocationSettings::gpsEnabledChanged,
-                this, &HybrisProvider::locationEnabledChanged);
-        connect(m_locationSettings, &LocationSettings::gpsFlightModeChanged,
-                this, &HybrisProvider::locationEnabledChanged);
-        connect(m_locationSettings, &LocationSettings::hereStateChanged,
-                this, &HybrisProvider::locationEnabledChanged);
-        connect(m_locationSettings, &LocationSettings::mlsEnabledChanged,
-                this, &HybrisProvider::locationEnabledChanged);
-        connect(m_locationSettings, &LocationSettings::mlsOnlineStateChanged,
-                this, &HybrisProvider::locationEnabledChanged);
     }
 }
 
@@ -1111,18 +1090,15 @@ void HybrisProvider::setStatus(HybrisProvider::Status status)
 */
 bool HybrisProvider::positioningEnabled()
 {
-    // Hybris AGPS mode doesn't have its own settings at the moment, so enabling if something related is
-    m_agpsEnabled = (m_locationSettings->hereAvailable() && m_locationSettings->hereState() == LocationSettings::OnlineAGpsEnabled)
-                 || (m_locationSettings->mlsAvailable()  && m_locationSettings->mlsEnabled());
-    m_agpsOnlineEnabled = (m_locationSettings->hereAvailable() && m_locationSettings->hereState() == LocationSettings::OnlineAGpsEnabled)
-                       || (m_locationSettings->mlsAvailable()  && m_locationSettings->mlsOnlineState() == LocationSettings::OnlineAGpsEnabled);
+    // AsteroidOS does not ship the Sailfish location settings backend
+    // (/var/lib/location/location.conf), so there is no LocationSettings object
+    // to gate on. Positioning is instead driven purely by geoclue clients
+    // acquiring/releasing references (AddReference/Start), so report enabled and
+    // leave AGPS (HERE/MLS online assistance) off, as no settings source exists.
+    m_agpsEnabled = false;
+    m_agpsOnlineEnabled = false;
 
-    // enable GPS positioning if location and the GPS are enabled, and the GPS is not in flight mode - if it is allowed by MDM.
-    return m_locationSettings->locationEnabled()
-       &&  m_locationSettings->gpsAvailable()
-       &&  m_locationSettings->gpsEnabled()
-       && !m_locationSettings->gpsFlightMode()
-       && (m_locationSettings->allowedDataSources() & LocationSettings::GpsData);
+    return true;
 }
 
 quint32 HybrisProvider::minimumRequestedUpdateInterval() const

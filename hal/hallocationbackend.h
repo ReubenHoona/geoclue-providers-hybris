@@ -25,8 +25,6 @@
 #include <android-version.h>
 #include <hardware/gps.h>
 
-#include <locationsettings.h>
-
 #include "locationtypes.h"
 
 class HalLocationBackend : public HybrisLocationBackend

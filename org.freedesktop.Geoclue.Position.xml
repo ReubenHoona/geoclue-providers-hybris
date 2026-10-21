@@ -17,7 +17,7 @@
       <arg type="d" name="longitude"/>
       <arg type="d" name="altitude"/>
       <arg type="(idd)" name="accuracy"/>
-      <annotation name="org.qtproject.QtDBus.QtTypeName.In5" value="Accuracy"/>
+      <annotation name="org.qtproject.QtDBus.QtTypeName.Out5" value="Accuracy"/>
     </signal>
   </interface>
 </node>

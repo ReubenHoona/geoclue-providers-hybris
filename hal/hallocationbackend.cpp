@@ -234,7 +234,7 @@ void nmeaCallback(GpsUtcTime timestamp, const char *nmeaData, int length)
 
 void setCapabilitiesCallback(uint32_t capabilities)
 {
-    qCDebug(lcGeoclueHybris) << "capabilities" << showbase << hex << capabilities;
+    qCDebug(lcGeoclueHybris) << "capabilities" << Qt::showbase << Qt::hex << capabilities;
 }
 
 void acquireWakelockCallback()
@@ -309,13 +309,13 @@ void gpsNiNotifyCallback(GpsNiNotification *notification)
 void agpsRilRequestSetId(uint32_t flags)
 {
     Q_UNUSED(flags)
-    qCDebug(lcGeoclueHybris) << "AGNSS RIL request set ID flags" << showbase << hex << flags;
+    qCDebug(lcGeoclueHybris) << "AGNSS RIL request set ID flags" << Qt::showbase << Qt::hex << flags;
 }
 
 void agpsRilRequestRefLoc(uint32_t flags)
 {
     Q_UNUSED(flags)
-    qCDebug(lcGeoclueHybris) << "AGNSS RIL request ref location flags" << showbase << hex << flags;
+    qCDebug(lcGeoclueHybris) << "AGNSS RIL request ref location flags" << Qt::showbase << Qt::hex << flags;
 }
 
 void gnssXtraDownloadRequest()
