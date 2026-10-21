@@ -931,11 +931,22 @@ void HybrisProvider::updateNetworkState()
     const NetworkManager::State state = m_networkManager->globalState();
     const bool connected = state == NetworkManager::OnlineState || state == NetworkManager::ReadyState;
     NetworkService *service = m_networkManager->defaultRoute();
-    const bool unmetered = service && service->type() != QLatin1String("cellular");
+
+    // connman's services are loaded after start-up: until the default route
+    // is known so is the connection type, so wait for defaultRouteChanged
+    // rather than report the connection as metered meanwhile
+    if (connected && !service)
+        return;
+
+    const bool unmetered = connected && service->type() != QLatin1String("cellular");
+    const int reported = (connected ? 1 : 0) | (unmetered ? 2 : 0);
+    if (reported == m_reportedNetworkState)
+        return;
+    m_reportedNetworkState = reported;
 
     qCDebug(lcGeoclueHybris) << "Network" << (connected ? "connected" : "not connected")
                              << (unmetered ? "unmetered" : "metered");
-    m_backend->aGnssRilUpdateNetworkState(connected, connected && unmetered);
+    m_backend->aGnssRilUpdateNetworkState(connected, unmetered);
 }
 
 void HybrisProvider::defaultDataModemChanged(const QString &modem)

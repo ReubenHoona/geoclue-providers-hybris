@@ -195,6 +195,7 @@ private:
     QMap<QString, ServiceData> m_watchedServices;
 
     QBasicTimer m_idleTimer;
+    int m_reportedNetworkState = -1;
     QBasicTimer m_fixLostTimer;
 
     Status m_status;
