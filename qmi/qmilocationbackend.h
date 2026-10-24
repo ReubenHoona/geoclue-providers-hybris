@@ -143,6 +143,7 @@ private:
     int m_xtraServerIndex;
     int m_xtraServersTried;
     qint64 m_lastXtraAttempt;
+    int m_xtraFailedRounds = 0;
     qint64 m_lastXtraSuccess;
     bool m_xtraPending;
     bool m_networkKnown;

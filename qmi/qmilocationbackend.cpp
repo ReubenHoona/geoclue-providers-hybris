@@ -54,6 +54,8 @@ const qint64 UsedPrnsMaxAgeMs = 3000;
 const qint64 UnlockRetryMs = 30000;
 // do not hammer the XTRA servers: after a failed round wait this long
 const int XtraRetryMs = 10 * 60 * 1000;
+// ... doubling per failed round up to this
+const int XtraRetryMaxMs = 6 * 60 * 60 * 1000;
 const qint64 XtraMinDownloadIntervalMs = 60 * 60 * 1000;
 const int XtraMinSize = 1000;
 const int XtraMaxSize = 1024 * 1024;
@@ -708,6 +710,12 @@ void QmiLocationBackend::checkXtra(bool requested)
         qCDebug(lcGeoclueQmiLoc) << "XTRA downloaded recently, not again";
         return;
     }
+    if (m_xtraRetryTimer.isActive()) {
+        // a round failed: the retry timer starts the next one
+        qCDebug(lcGeoclueQmiLoc) << "XTRA download backing off after" << m_xtraFailedRounds
+                                 << "failed round(s)";
+        return;
+    }
     m_xtraServersTried = 0;
     startXtraDownload();
 }
@@ -791,6 +799,15 @@ void QmiLocationBackend::startXtraDownload()
     m_xtraServersTried++;
     m_xtraReply = m_network->get(request);
     connect(m_xtraReply, &QNetworkReply::finished, this, &QmiLocationBackend::xtraDownloadFinished);
+    // do not buffer more than the largest file we would accept
+    QNetworkReply *reply = m_xtraReply;
+    connect(reply, &QNetworkReply::downloadProgress, this, [reply](qint64 received, qint64 total) {
+        if (received > XtraMaxSize || total > XtraMaxSize) {
+            qCWarning(lcGeoclueQmiLoc) << "XTRA download larger than" << XtraMaxSize
+                                       << "bytes, aborted";
+            reply->abort();
+        }
+    });
 }
 
 void QmiLocationBackend::xtraDownloadFinished()
@@ -823,6 +840,7 @@ void QmiLocationBackend::xtraDownloadFinished()
         return;
     }
     m_lastXtraSuccess = monotonicMs();
+    m_xtraFailedRounds = 0;
 
     QDir().mkpath(m_cfgCacheDir);
     QSaveFile f(cacheFile(QStringLiteral("xtra.bin")));
@@ -840,7 +858,13 @@ void QmiLocationBackend::xtraDownloadFailed()
     if (m_engineReady && !m_xtraInjected && cache.exists() &&
         cache.lastModified().msecsTo(QDateTime::currentDateTime()) < m_cfgXtraMaxAgeHours * 3600e3)
         injectCachedXtra();
-    m_xtraRetryTimer.start(XtraRetryMs, this);
+    m_xtraFailedRounds++;
+    qint64 delay = XtraRetryMs;
+    for (int i = 1; i < m_xtraFailedRounds && delay < XtraRetryMaxMs; i++)
+        delay *= 2;
+    delay = qMin<qint64>(delay, XtraRetryMaxMs);
+    qCInfo(lcGeoclueQmiLoc) << "XTRA download round failed, next try in" << delay / 60000 << "min";
+    m_xtraRetryTimer.start(int(delay), this);
 }
 
 /*==========================================================================*
